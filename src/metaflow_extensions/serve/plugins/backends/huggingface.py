@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pickle
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -47,6 +48,8 @@ class HuggingFaceBackend(ServingBackend):
         endpoint_name: str,
         *,
         config: dict[str, Any] | None = None,
+        service_cls: type | None = None,
+        artifacts: Any | None = None,
     ) -> EndpointInfo:
         config = config or {}
         api = self._get_api()
@@ -56,6 +59,9 @@ class HuggingFaceBackend(ServingBackend):
             raise ValueError(
                 "HuggingFace backend requires 'repository' in config (e.g. 'user/model-name')."
             )
+
+        if service_cls is not None:
+            self._push_service_files(api, repository, service_cls, artifacts, model_ref)
 
         # Build kwargs for create_inference_endpoint.
         create_kwargs: dict[str, Any] = {
@@ -119,6 +125,69 @@ class HuggingFaceBackend(ServingBackend):
             endpoint_info.name,
             namespace=namespace,
         )
+
+    def _push_service_files(
+        self,
+        api: Any,
+        repo_id: str,
+        service_cls: type,
+        artifacts: Any | None,
+        model_ref: ModelReference,
+    ) -> None:
+        """Upload handler.py, requirements.txt, and pickled artifacts to the HF repo."""
+        from ..codegen import generate_handler
+        from ..codegen import generate_requirements
+        from ..codegen import get_artifact_names
+
+        artifact_names = get_artifact_names(service_cls)
+
+        # Upload handler.py
+        handler_src = generate_handler(service_cls, artifact_names)
+        api.upload_file(
+            path_or_fileobj=handler_src.encode(),
+            path_in_repo="handler.py",
+            repo_id=repo_id,
+            repo_type="model",
+        )
+
+        # Upload requirements.txt — pull resolved deps from the Metaflow task's
+        # conda/pypi environment so the HF endpoint gets the same packages.
+        env_info = self._get_task_env_info(model_ref)
+        reqs = generate_requirements(env_info=env_info)
+        api.upload_file(
+            path_or_fileobj=reqs.encode(),
+            path_in_repo="requirements.txt",
+            repo_id=repo_id,
+            repo_type="model",
+        )
+
+        # Upload pickled artifacts — loaded from the Artifacts object
+        # that Deployment already resolved from the Metaflow step.
+        if artifacts is not None:
+            flow_source = getattr(artifacts, "flow", None)
+            for name in artifact_names:
+                if flow_source is not None:
+                    data = getattr(flow_source, name)
+                    api.upload_file(
+                        path_or_fileobj=pickle.dumps(data),
+                        path_in_repo=f"artifacts/{name}.pkl",
+                        repo_id=repo_id,
+                        repo_type="model",
+                    )
+
+    @staticmethod
+    def _get_task_env_info(model_ref: ModelReference) -> dict | None:
+        """Load environment info from the Metaflow task that produced the model."""
+        try:
+            from metaflow import Task
+        except ImportError:
+            return None
+        try:
+            task = Task(model_ref.pathspec)
+            return task.environment_info
+        except Exception:
+            # Task may not exist (tests, unknown pathspec, no conda env)
+            return None
 
     def wait_for_ready(
         self,

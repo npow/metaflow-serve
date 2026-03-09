@@ -91,6 +91,8 @@ class Deployment:
             self._model_ref,
             endpoint_name,
             config=merged_config if merged_config else None,
+            service_cls=self._service_cls,
+            artifacts=self._artifacts,
         )
 
         # Wait for ready

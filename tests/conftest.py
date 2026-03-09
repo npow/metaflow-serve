@@ -59,8 +59,16 @@ class MockBackend(ServingBackend):
         endpoint_name: str,
         *,
         config: dict | None = None,
+        service_cls: type | None = None,
+        artifacts: Any | None = None,
     ) -> EndpointInfo:
-        self.calls.append(("deploy", (model_ref, endpoint_name), {"config": config}))
+        self.calls.append(
+            (
+                "deploy",
+                (model_ref, endpoint_name),
+                {"config": config, "service_cls": service_cls, "artifacts": artifacts},
+            )
+        )
         return EndpointInfo(
             name=endpoint_name,
             url=f"https://mock.api/{endpoint_name}",

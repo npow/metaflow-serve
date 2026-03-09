@@ -22,7 +22,7 @@ class _ReadmeMockBackend(ServingBackend):
 
     name = "readme-mock"
 
-    def deploy(self, model_ref, endpoint_name, *, config=None):  # type: ignore[override]
+    def deploy(self, model_ref, endpoint_name, *, config=None, service_cls=None, artifacts=None):  # type: ignore[override]
         return EndpointInfo(
             name=endpoint_name,
             url="",

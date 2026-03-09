@@ -81,6 +81,8 @@ class ServingBackend(ABC):
         endpoint_name: str,
         *,
         config: dict[str, Any] | None = None,
+        service_cls: type | None = None,
+        artifacts: Any | None = None,
     ) -> EndpointInfo:
         """Deploy a model and return endpoint info."""
 
