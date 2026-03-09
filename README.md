@@ -3,7 +3,7 @@
 [![CI](https://github.com/npow/metaflow-serve/actions/workflows/ci.yml/badge.svg)](https://github.com/npow/metaflow-serve/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/metaflow-serve)](https://pypi.org/project/metaflow-serve/)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/) [![Docs](https://img.shields.io/badge/docs-mintlify-18a34a?style=flat-square)](https://mintlify.com/npow/metaflow-serve)
 
 Deploy ML models from Metaflow flows with full lineage tracking.
 
@@ -60,7 +60,6 @@ class SentimentService(ServiceSpec):
 from metaflow import FlowSpec, step
 from metaflow_extensions.serve import Deployment, ServiceSpec, endpoint, initialize
 
-
 class SentimentService(ServiceSpec):
     @initialize(backend="huggingface")
     def init(self):
@@ -69,7 +68,6 @@ class SentimentService(ServiceSpec):
     @endpoint
     def predict(self, request_dict):
         return {"sentiment": self.model(request_dict["text"])}
-
 
 class TrainAndDeployFlow(FlowSpec):
     @step
@@ -92,7 +90,6 @@ class TrainAndDeployFlow(FlowSpec):
     @step
     def end(self):
         print(f"Endpoint: {self.deployment.endpoint_url}")
-
 
 if __name__ == "__main__":
     TrainAndDeployFlow()
