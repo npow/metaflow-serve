@@ -115,5 +115,3 @@ class TestDeploymentE2E:
         assert isinstance(d, dict)
         assert d["backend"] == "mock"
         assert "model_ref" in d
-
-
