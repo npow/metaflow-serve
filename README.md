@@ -18,7 +18,7 @@ pip install "metaflow-serve[huggingface]"
 ```
 
 ```python
-from metaflow_extensions.serve import ServiceSpec, Deployment, endpoint, initialize
+from metaflow_extensions.serve import ServiceSpec, endpoint, initialize
 
 class MyService(ServiceSpec):
     @initialize(backend="huggingface")
@@ -28,13 +28,6 @@ class MyService(ServiceSpec):
     @endpoint
     def predict(self, request_dict):
         return {"result": self.model.predict(request_dict["input"])}
-
-# Deploy from a Metaflow step
-deployment = (
-    Deployment(MyService, step=self.train, config={"repository": "user/model"})
-    .audit("predict", payload={"input": [1, 2, 3]})
-    .promote()
-)
 ```
 
 ## Install
@@ -69,19 +62,29 @@ class SentimentService(ServiceSpec):
 
 ```python
 from metaflow import FlowSpec, step
-from metaflow_extensions.serve import Deployment
+from metaflow_extensions.serve import Deployment, ServiceSpec, endpoint, initialize
+
+
+class SentimentService(ServiceSpec):
+    @initialize(backend="huggingface")
+    def init(self):
+        self.model = self.artifacts.flow.model
+
+    @endpoint
+    def predict(self, request_dict):
+        return {"sentiment": self.model(request_dict["text"])}
+
 
 class TrainAndDeployFlow(FlowSpec):
     @step
-    def train(self):
-        self.model = train_model()
-        self.tokenizer = load_tokenizer()
+    def start(self):
+        self.model = "trained-model-placeholder"
         self.next(self.deploy)
 
     @step
     def deploy(self):
         self.deployment = (
-            Deployment(SentimentService, step=self.train, config={
+            Deployment(SentimentService, step=self, config={
                 "repository": "user/sentiment-model",
                 "instance_type": "nvidia-a10g.xlarge",
             })
@@ -93,25 +96,39 @@ class TrainAndDeployFlow(FlowSpec):
     @step
     def end(self):
         print(f"Endpoint: {self.deployment.endpoint_url}")
+
+
+if __name__ == "__main__":
+    TrainAndDeployFlow()
 ```
 
 ### Add a custom backend
 
 ```python
-from metaflow_extensions.serve.plugins.backends.backend import ServingBackend
+from metaflow_extensions.serve.plugins.backends.backend import (
+    EndpointInfo,
+    EndpointStatus,
+    ModelReference,
+    ServingBackend,
+)
 from metaflow_extensions.serve.plugins.backends import register
+
 
 class ModalBackend(ServingBackend):
     name = "modal"
 
-    def deploy(self, model_ref, endpoint_name, *, config=None):
+    def deploy(self, model_ref: ModelReference, endpoint_name: str, *, config=None) -> EndpointInfo:
+        # Deploy to Modal and return endpoint info
         ...
 
-    def get_status(self, endpoint_info):
+    def get_status(self, endpoint_info: EndpointInfo) -> EndpointStatus:
+        # Query Modal for current endpoint status
         ...
 
-    def delete(self, endpoint_info):
+    def delete(self, endpoint_info: EndpointInfo) -> None:
+        # Tear down the Modal endpoint
         ...
+
 
 register("modal", ModalBackend)
 ```

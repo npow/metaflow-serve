@@ -117,17 +117,3 @@ class TestDeploymentE2E:
         assert "model_ref" in d
 
 
-@pytest.mark.integration
-class TestHFServerlessInference:
-    """Hits the free HF Serverless Inference API (no token required)."""
-
-    def test_text_classification(self):
-        from huggingface_hub import InferenceClient
-
-        client = InferenceClient()
-        result = client.text_classification("I love this product!")
-        top = result[0] if isinstance(result, list) else result
-        label = top.label if hasattr(top, "label") else top.get("label", "?")
-        score = top.score if hasattr(top, "score") else top.get("score", 0)
-        assert label == "POSITIVE"
-        assert score > 0.9

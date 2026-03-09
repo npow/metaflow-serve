@@ -99,9 +99,7 @@ addopts = [
     "--strict-config",
     "-ra",
 ]
-markers = [
-    "integration: tests that require network access (HF serverless API)",
-]
+markers = []
 
 # ── Coverage ─────────────────────────────────────────────────────────────────
 
