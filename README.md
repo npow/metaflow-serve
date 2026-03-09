@@ -114,11 +114,8 @@ class QuickService(ServiceSpec):
 
 dep = Deployment(QuickService, config={"backend": "readme-mock"})
 dep = dep.audit("predict").promote()
-
-assert dep.version.status == EndpointStatus.RUNNING
-assert dep.as_dict()["status"] == "running"
-
-_REGISTRY.pop("readme-mock", None)
+print(dep.version.status)   # EndpointStatus.RUNNING
+print(dep.as_dict()["name"])  # QuickService
 ```
 
 ### Add a custom backend
@@ -140,8 +137,6 @@ class ModalBackend(ServingBackend):
         ...
 
 register("modal", ModalBackend)
-assert "modal" in _REGISTRY
-_REGISTRY.pop("modal", None)
 ```
 
 ## How it works

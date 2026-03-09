@@ -47,8 +47,22 @@ def _mock_step(**artifacts):  # type: ignore[no-untyped-def]
     return step
 
 
+# Track backends registered by README snippets so we can clean up after each block.
+_readme_registered: list[str] = []
+
+
+def _readme_register(name, backend_cls):  # type: ignore[no-untyped-def]
+    """Register a backend and track it for automatic cleanup."""
+    register(name, backend_cls)
+    _readme_registered.append(name)
+
+
 def pytest_markdown_docs_globals():  # type: ignore[no-untyped-def]
     """Inject these names into every README code block automatically."""
+    # Clean up any backends registered by the previous block
+    while _readme_registered:
+        _REGISTRY.pop(_readme_registered.pop(), None)
+
     return {
         # Core API
         "ServiceSpec": ServiceSpec,
@@ -61,8 +75,7 @@ def pytest_markdown_docs_globals():  # type: ignore[no-untyped-def]
         "EndpointInfo": EndpointInfo,
         "EndpointStatus": EndpointStatus,
         "ModelReference": ModelReference,
-        "register": register,
-        "_REGISTRY": _REGISTRY,
+        "register": _readme_register,
         # Test helpers
         "MagicMock": MagicMock,
         "mock_step": _mock_step,
