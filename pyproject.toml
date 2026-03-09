@@ -94,7 +94,7 @@ force-single-line = true
 # ── Pytest ───────────────────────────────────────────────────────────────────
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "."]
+testpaths = ["tests", "README.md"]
 addopts = [
     "--strict-markers",
     "--strict-config",

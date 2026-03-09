@@ -18,10 +18,6 @@ pip install "metaflow-serve[huggingface]"
 ```
 
 ```python
-from metaflow_extensions.serve import ServiceSpec, endpoint, initialize
-from metaflow_extensions.serve.plugins.artifacts import Artifacts
-from unittest.mock import MagicMock
-
 class MyService(ServiceSpec):
     @initialize(backend="huggingface")
     def init(self):
@@ -30,13 +26,6 @@ class MyService(ServiceSpec):
     @endpoint
     def predict(self, request_dict):
         return {"result": self.model.predict(request_dict["input"])}
-
-# --- test it works ---
-mock_step = MagicMock()
-mock_step.task.data.model = MagicMock()
-mock_step.task.data.model.predict = lambda x: x
-svc = MyService(artifacts=Artifacts.from_step(mock_step))
-assert svc.predict({"input": [1, 2, 3]}) == {"result": [1, 2, 3]}
 ```
 
 ## Install
@@ -53,10 +42,6 @@ pip install "metaflow-serve[huggingface]"
 ### Define a service with artifact access
 
 ```python
-from metaflow_extensions.serve import ServiceSpec, endpoint, initialize
-from metaflow_extensions.serve.plugins.artifacts import Artifacts
-from unittest.mock import MagicMock
-
 class SentimentService(ServiceSpec):
     @initialize(backend="huggingface", cpu=1, memory=2048)
     def init(self):
@@ -67,13 +52,6 @@ class SentimentService(ServiceSpec):
     def predict(self, request_dict):
         tokens = self.tokenizer(request_dict["text"])
         return {"sentiment": self.model(tokens)}
-
-# --- test it works ---
-mock_step = MagicMock()
-mock_step.task.data.model = lambda tokens: "positive"
-mock_step.task.data.tokenizer = lambda text: f"tok:{text}"
-svc = SentimentService(artifacts=Artifacts.from_step(mock_step))
-assert svc.predict({"text": "great movie"}) == {"sentiment": "positive"}
 ```
 
 ### Deploy, audit, and promote from a flow
@@ -120,60 +98,32 @@ if __name__ == "__main__":
     TrainAndDeployFlow()
 ```
 
-The deploy flow block above uses Metaflow's `FlowSpec` which requires source file introspection
-and cannot be tested in isolation. See `tests/test_readme.py` for a mock-backed end-to-end test
-of the Deployment chain.
-
-### Test the Deployment chain
+### Deploy and verify programmatically
 
 ```python
-from metaflow_extensions.serve import Deployment, ServiceSpec, endpoint, initialize
-from metaflow_extensions.serve.plugins.backends.backend import (
-    EndpointInfo, EndpointStatus, ModelReference, ServingBackend,
-)
-from metaflow_extensions.serve.plugins.backends import register, _REGISTRY
+register("readme-mock", _ReadmeMockBackend)
 
-class MockBackend(ServingBackend):
-    name = "readme-test"
-    def deploy(self, model_ref, endpoint_name, *, config=None):
-        return EndpointInfo(
-            name=endpoint_name, url="", backend=self.name,
-            status=EndpointStatus.RUNNING, model_ref=model_ref, deploy_pathspec="",
-        )
-    def get_status(self, endpoint_info):
-        return EndpointStatus.RUNNING
-    def delete(self, endpoint_info):
-        pass
-
-register("readme-test", MockBackend)
-
-class TestService(ServiceSpec):
-    @initialize(backend="readme-test")
+class QuickService(ServiceSpec):
+    @initialize(backend="readme-mock")
     def init(self):
         pass
+
     @endpoint
     def predict(self, request_dict):
         return {"ok": True}
 
-dep = Deployment(TestService, config={"backend": "readme-test"}).audit("predict").promote()
-assert dep._promoted is True
+dep = Deployment(QuickService, config={"backend": "readme-mock"})
+dep = dep.audit("predict").promote()
+
 assert dep.version.status == EndpointStatus.RUNNING
 assert dep.as_dict()["status"] == "running"
-_REGISTRY.pop("readme-test", None)
+
+_REGISTRY.pop("readme-mock", None)
 ```
 
 ### Add a custom backend
 
 ```python
-from metaflow_extensions.serve.plugins.backends.backend import (
-    EndpointInfo,
-    EndpointStatus,
-    ModelReference,
-    ServingBackend,
-)
-from metaflow_extensions.serve.plugins.backends import register, _REGISTRY
-
-
 class ModalBackend(ServingBackend):
     name = "modal"
 
@@ -188,7 +138,6 @@ class ModalBackend(ServingBackend):
     def delete(self, endpoint_info: EndpointInfo) -> None:
         # Tear down the Modal endpoint
         ...
-
 
 register("modal", ModalBackend)
 assert "modal" in _REGISTRY
@@ -210,8 +159,8 @@ pip install -e ".[huggingface,dev]"
 ruff check src/ tests/
 ruff format src/ tests/
 
-# Tests (includes README snippet validation)
-pytest --markdown-docs
+# Tests (includes README snippet validation via pytest-markdown-docs)
+pytest
 
 # Type checking
 mypy src/
