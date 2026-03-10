@@ -197,6 +197,7 @@ class HFLocalSimulator:
         )
 
         # Wait for ready or error
+        assert self._proc.stdout is not None  # noqa: S101
         try:
             line = self._proc.stdout.readline()
         except Exception as exc:
@@ -234,6 +235,9 @@ class HFLocalSimulator:
         return self._call_stdio(data)
 
     def _call_stdio(self, data: dict) -> dict:
+        assert self._proc is not None  # noqa: S101  # guaranteed by call()
+        assert self._proc.stdin is not None  # noqa: S101
+        assert self._proc.stdout is not None  # noqa: S101
         request = json.dumps({"action": "call", "data": data}) + "\n"
         self._proc.stdin.write(request)
         self._proc.stdin.flush()
@@ -245,9 +249,9 @@ class HFLocalSimulator:
         msg = json.loads(line)
         if "error" in msg:
             raise SimulatorError(msg["error"])
-        return msg["result"]
+        return dict(msg["result"])
 
-    def _call_http(self, data: dict) -> dict:
+    def _call_http(self, data: dict) -> dict[str, object]:
         url = f"http://127.0.0.1:{self._port}/"
         body = json.dumps(data).encode()
         req = urllib.request.Request(  # noqa: S310
@@ -258,7 +262,8 @@ class HFLocalSimulator:
         )
         try:
             with urllib.request.urlopen(req) as resp:  # noqa: S310
-                return json.loads(resp.read())
+                result: dict[str, object] = json.loads(resp.read())
+                return result
         except urllib.error.HTTPError as exc:
             response_body = exc.read().decode()
             try:
@@ -281,7 +286,7 @@ class HFLocalSimulator:
                 except Exception:
                     self._proc.kill()
                     self._proc.wait()
-            else:
+            elif self._proc.stdin is not None:
                 try:
                     self._proc.stdin.write(json.dumps({"action": "shutdown"}) + "\n")
                     self._proc.stdin.flush()
@@ -302,5 +307,5 @@ class HFLocalSimulator:
         self.start()
         return self
 
-    def __exit__(self, *exc) -> None:
+    def __exit__(self, *exc: object) -> None:
         self.stop()

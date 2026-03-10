@@ -19,6 +19,7 @@ def initialize(
     backend: str = "huggingface",
     cpu: int | None = None,
     memory: int | None = None,
+    packages: dict[str, str] | None = None,
     **config: Any,
 ) -> Callable[..., Any]:
     """Mark a method as the service initializer.
@@ -31,6 +32,11 @@ def initialize(
         Number of CPUs to request.
     memory : int, optional
         Memory in MB to request.
+    packages : dict[str, str], optional
+        Python packages required by the service, as ``{"name": "version_spec"}``.
+        For example ``{"torch": ">=2.0", "numpy": ">=1.24"}``.
+        These are merged with any packages resolved from the Metaflow step
+        environment.
     **config
         Additional backend-specific configuration.
     """
@@ -41,6 +47,7 @@ def initialize(
             "backend": backend,
             "cpu": cpu,
             "memory": memory,
+            "packages": packages,
             **config,
         }
         return func
@@ -147,6 +154,26 @@ class ServiceSpec:
             @endpoint
             def predict(self, request_dict):
                 return {"prediction": self.model.predict(request_dict["input"])}
+
+    Specify Python dependencies via ``@initialize`` so the generated handler
+    includes the right packages::
+
+        class MyService(ServiceSpec):
+            @initialize(
+                backend="huggingface",
+                packages={"torch": ">=2.0", "numpy": ">=1.24"},
+            )
+            def init(self):
+                self.model = self.artifacts.flow.model
+
+            @endpoint
+            def predict(self, data):
+                import torch
+                tensor = torch.tensor(data["input"])
+                return {"result": self.model(tensor).tolist()}
+
+    When deploying from a Metaflow step that uses ``@conda``/``@pypi``,
+    the step's resolved environment is used automatically.
     """
 
     def __init__(self, artifacts: Artifacts | None = None) -> None:

@@ -152,8 +152,13 @@ class HuggingFaceBackend(ServingBackend):
 
         # Upload requirements.txt — pull resolved deps from the Metaflow task's
         # conda/pypi environment so the HF endpoint gets the same packages.
+        # Merge with explicit packages from @initialize(packages={...}).
+        from ..service import _get_init_config
+
+        init_config = _get_init_config(service_cls)
+        packages = init_config.get("packages")
         env_info = self._get_task_env_info(model_ref)
-        reqs = generate_requirements(env_info=env_info)
+        reqs = generate_requirements(env_info=env_info, packages=packages)
         api.upload_file(
             path_or_fileobj=reqs.encode(),
             path_in_repo="requirements.txt",

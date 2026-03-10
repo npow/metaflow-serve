@@ -188,6 +188,7 @@ def extract_requirements_from_env_info(env_info: dict) -> list[str]:
 def generate_requirements(
     env_info: dict | None = None,
     extra_deps: list[str] | None = None,
+    packages: dict[str, str] | None = None,
 ) -> str:
     """Generate a ``requirements.txt`` string.
 
@@ -199,6 +200,10 @@ def generate_requirements(
         gets the same environment.
     extra_deps : list[str], optional
         Additional pip requirement strings to append.
+    packages : dict[str, str], optional
+        Packages from ``@initialize(packages={...})``.  Keys are package
+        names, values are version specifiers (e.g. ``{"torch": ">=2.0"}``).
+        These take precedence over env_info for the same package name.
     """
     deps: list[str] = []
     if env_info is not None:
@@ -208,4 +213,21 @@ def generate_requirements(
         deps.append("metaflow-serve")
     if extra_deps:
         deps.extend(extra_deps)
+    # Merge explicit packages — override any env_info entry for the same name
+    if packages:
+
+        def _pkg_name(dep: str) -> str:
+            for sep in ("==", ">=", "<=", "!="):
+                dep = dep.split(sep)[0]
+            return dep
+
+        existing_names = {_pkg_name(d) for d in deps}
+        for name, version in packages.items():
+            if name in existing_names:
+                # Remove the existing entry so the explicit one wins
+                deps = [d for d in deps if not d.startswith(name)]
+            if version:
+                deps.append(f"{name}{version}")
+            else:
+                deps.append(name)
     return "\n".join(deps) + "\n"

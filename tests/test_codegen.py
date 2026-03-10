@@ -242,6 +242,38 @@ class TestGenerateRequirements:
         # When env_info provides deps, metaflow-serve fallback is not added
         assert "metaflow-serve" not in lines
 
+    def test_packages_only(self):
+        reqs = generate_requirements(packages={"torch": ">=2.0", "numpy": ">=1.24"})
+        lines = reqs.strip().split("\n")
+        assert "torch>=2.0" in lines
+        assert "numpy>=1.24" in lines
+        assert "metaflow-serve" in lines
+
+    def test_packages_empty_version(self):
+        reqs = generate_requirements(packages={"transformers": ""})
+        lines = reqs.strip().split("\n")
+        assert "transformers" in lines
+
+    def test_packages_override_env_info(self):
+        env_info = {
+            "pypi": [
+                {"url": "https://example.com/numpy-1.21.0-cp310-cp310-linux_x86_64.whl"},
+                {"url": "https://example.com/scipy-1.7.0-cp310-cp310-linux_x86_64.whl"},
+            ]
+        }
+        reqs = generate_requirements(
+            env_info=env_info,
+            packages={"numpy": ">=1.24", "torch": ">=2.0"},
+        )
+        lines = reqs.strip().split("\n")
+        # numpy from packages overrides env_info
+        assert "numpy>=1.24" in lines
+        assert "numpy==1.21.0" not in lines
+        # scipy preserved from env_info
+        assert "scipy==1.7.0" in lines
+        # torch added from packages
+        assert "torch>=2.0" in lines
+
     def test_env_info_plus_extra_deps(self):
         env_info = {
             "pypi": [

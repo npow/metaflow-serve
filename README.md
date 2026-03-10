@@ -54,6 +54,31 @@ class SentimentService(ServiceSpec):
         return {"sentiment": self.model(tokens)}
 ```
 
+### Specify Python packages
+
+When deploying from a Metaflow step that uses `@conda` or `@pypi`, the
+step's resolved environment is used automatically. You can also specify
+packages explicitly via `@initialize`:
+
+```python notest
+class TorchService(ServiceSpec):
+    @initialize(
+        backend="huggingface",
+        packages={"torch": ">=2.0", "numpy": ">=1.24"},
+    )
+    def init(self):
+        self.model = self.artifacts.flow.model
+
+    @endpoint
+    def predict(self, data):
+        import torch
+        tensor = torch.tensor(data["input"])
+        return {"result": self.model(tensor).tolist()}
+```
+
+Explicit `packages` are merged with (and override) any packages resolved
+from the Metaflow step environment.
+
 ### Deploy, audit, and promote from a flow
 
 ```python notest

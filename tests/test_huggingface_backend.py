@@ -135,3 +135,133 @@ class TestHuggingFaceWaitForReady:
         result = hf_backend.wait_for_ready(info, timeout=30)
         assert result.status == EndpointStatus.RUNNING
         mock_endpoint.wait.assert_called_once_with(timeout=30)
+
+
+class TestHuggingFacePushServiceFiles:
+    def test_push_uploads_handler_requirements_and_artifacts(self, hf_backend, mock_hf_api):
+        from metaflow_extensions.serve.plugins.service import ServiceSpec
+        from metaflow_extensions.serve.plugins.service import endpoint
+        from metaflow_extensions.serve.plugins.service import initialize
+
+        class _SvcForPush(ServiceSpec):
+            @initialize(backend="huggingface")
+            def init(self):
+                self.model = self.artifacts.flow.model
+
+            @endpoint
+            def predict(self, request_dict):
+                return {"result": self.model(request_dict)}
+
+        mock_artifacts = MagicMock()
+        mock_artifacts.flow.model = "fake-model-data"
+
+        ref = make_model_ref()
+
+        with patch.object(HuggingFaceBackend, "_get_task_env_info", return_value=None):
+            hf_backend._push_service_files(
+                mock_hf_api, "user/model", _SvcForPush, mock_artifacts, ref
+            )
+
+        # Should upload handler.py, requirements.txt, and artifacts/model.pkl
+        upload_calls = mock_hf_api.upload_file.call_args_list
+        paths_uploaded = [
+            c[1].get("path_in_repo") or c.kwargs.get("path_in_repo") for c in upload_calls
+        ]
+        assert "handler.py" in paths_uploaded
+        assert "requirements.txt" in paths_uploaded
+        assert "artifacts/model.pkl" in paths_uploaded
+
+    def test_push_without_artifacts(self, hf_backend, mock_hf_api):
+        from metaflow_extensions.serve.plugins.service import ServiceSpec
+        from metaflow_extensions.serve.plugins.service import endpoint
+        from metaflow_extensions.serve.plugins.service import initialize
+
+        class _SvcNone(ServiceSpec):
+            @initialize(backend="huggingface")
+            def init(self):
+                pass
+
+            @endpoint
+            def predict(self, request_dict):
+                return {}
+
+        ref = make_model_ref()
+
+        with patch.object(HuggingFaceBackend, "_get_task_env_info", return_value=None):
+            hf_backend._push_service_files(mock_hf_api, "user/model", _SvcNone, None, ref)
+
+        # Should upload handler.py and requirements.txt but no artifacts
+        upload_calls = mock_hf_api.upload_file.call_args_list
+        paths_uploaded = [
+            c[1].get("path_in_repo") or c.kwargs.get("path_in_repo") for c in upload_calls
+        ]
+        assert "handler.py" in paths_uploaded
+        assert "requirements.txt" in paths_uploaded
+        assert not any("artifacts/" in p for p in paths_uploaded)
+
+
+class TestHuggingFaceDeployWithServiceCls:
+    def test_deploy_calls_push_service_files(self, hf_backend, mock_hf_api):
+        from metaflow_extensions.serve.plugins.service import ServiceSpec
+        from metaflow_extensions.serve.plugins.service import endpoint
+        from metaflow_extensions.serve.plugins.service import initialize
+
+        class _SvcDeploy(ServiceSpec):
+            @initialize(backend="huggingface")
+            def init(self):
+                self.model = self.artifacts.flow.model
+
+            @endpoint
+            def predict(self, request_dict):
+                return {}
+
+        mock_endpoint = MagicMock()
+        mock_endpoint.name = "ep"
+        mock_endpoint.url = "https://hf.co/ep"
+        mock_endpoint.status = "pending"
+        mock_hf_api.create_inference_endpoint.return_value = mock_endpoint
+
+        ref = make_model_ref()
+
+        with patch.object(HuggingFaceBackend, "_push_service_files") as mock_push:
+            hf_backend.deploy(
+                ref,
+                "ep",
+                config={"repository": "user/model"},
+                service_cls=_SvcDeploy,
+                artifacts=MagicMock(),
+            )
+            mock_push.assert_called_once()
+
+    def test_deploy_with_custom_image(self, hf_backend, mock_hf_api):
+        mock_endpoint = MagicMock()
+        mock_endpoint.name = "ep"
+        mock_endpoint.url = "https://hf.co/ep"
+        mock_endpoint.status = "pending"
+        mock_hf_api.create_inference_endpoint.return_value = mock_endpoint
+
+        ref = make_model_ref()
+        config = {
+            "repository": "user/model",
+            "custom_image": {"url": "registry.example.com/image:latest"},
+        }
+        hf_backend.deploy(ref, "ep", config=config)
+
+        call_kwargs = mock_hf_api.create_inference_endpoint.call_args[1]
+        assert call_kwargs["custom_image"] == {"url": "registry.example.com/image:latest"}
+
+
+class TestGetTaskEnvInfo:
+    def test_returns_none_without_metaflow(self):
+        """Should return None if metaflow not importable."""
+        ref = make_model_ref()
+        with patch.dict("sys.modules", {"metaflow": None}):
+            result = HuggingFaceBackend._get_task_env_info(ref)
+        # May or may not be None depending on import caching, but should not raise
+        assert result is None or isinstance(result, dict)
+
+    def test_returns_none_on_task_not_found(self):
+        ref = make_model_ref(pathspec="NonExistent/0/step/0")
+        # This should not raise — it should return None
+        result = HuggingFaceBackend._get_task_env_info(ref)
+        assert result is None

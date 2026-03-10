@@ -77,6 +77,7 @@ class Deployment:
         # Remove non-backend keys
         merged_config.pop("cpu", None)
         merged_config.pop("memory", None)
+        merged_config.pop("packages", None)
 
         # Build model reference from step context
         self._model_ref = self._build_model_ref(step)
@@ -85,6 +86,7 @@ class Deployment:
         backend = get_backend(backend_name)
         self._backend = backend
         self._backend_name = backend_name
+        self._config = merged_config
 
         endpoint_name = merged_config.pop("endpoint_name", None) or service_cls.__name__
         self._endpoint_info = backend.deploy(
@@ -143,10 +145,17 @@ class Deployment:
                 import urllib.request
 
                 req_data = json.dumps(payload or {}).encode()
+                headers: dict[str, str] = {"Content-Type": "application/json"}
+
+                # Add auth headers for backends that need them (e.g. HF protected endpoints)
+                token = self._get_backend_token()
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+
                 req = urllib.request.Request(  # noqa: S310
                     url,
                     data=req_data,
-                    headers={"Content-Type": "application/json"},
+                    headers=headers,
                     method="POST",
                 )
                 with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
@@ -186,6 +195,23 @@ class Deployment:
         """Serialize the deployment info for storage as a Metaflow artifact."""
         result: dict[str, Any] = asdict_with_enums(self._endpoint_info)
         return result
+
+    def _get_backend_token(self) -> str | None:
+        """Return an auth token for the backend, if available."""
+        import os
+
+        # Check backend instance for a token attribute (e.g. HuggingFaceBackend._token)
+        token = getattr(self._backend, "_token", None)
+        if token:
+            return str(token)
+        # Fallback to well-known env vars per backend
+        env_vars = {
+            "huggingface": "HF_TOKEN",
+        }
+        env_var = env_vars.get(self._backend_name)
+        if env_var:
+            return os.environ.get(env_var)
+        return None
 
     def _build_model_ref(self, step: Any) -> ModelReference:
         """Build a ModelReference from a step context."""
