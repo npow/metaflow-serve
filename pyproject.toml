@@ -50,6 +50,9 @@ dev = [
     "pytest-markdown-docs>=0.5",
     "ruff>=0.8",
     "mypy>=1.10",
+    # Used by test_codegen / test_e2e via dynamic __import__("numpy") to verify
+    # round-trip serialization with a real third-party library artifact.
+    "numpy",
 ]
 
 [tool.hatch.build.targets.wheel]
