@@ -7,6 +7,7 @@ import pickle
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 
 from .backend import EndpointInfo
 from .backend import EndpointStatus
@@ -189,7 +190,9 @@ class HuggingFaceBackend(ServingBackend):
             return None
         try:
             task = Task(model_ref.pathspec)
-            return task.environment_info
+            # metaflow's Task.environment_info is typed Any (the metaflow stubs
+            # don't declare it), so cast for mypy's no-any-return strictness.
+            return cast("dict | None", task.environment_info)
         except Exception:
             # Task may not exist (tests, unknown pathspec, no conda env)
             return None
